@@ -41,7 +41,6 @@ unsigned long currTime = 0;
 
 byte internalButtonStatus[4];
 
-
 Bounce joystickUP = Bounce();
 Bounce joystickDOWN = Bounce();
 Bounce joystickLEFT = Bounce();
@@ -68,14 +67,15 @@ typedef enum {
 } State_t;
 State_t state;
 
+
 typedef enum {
   NEUTRAL,  //L+R=N
   NEGATIVE, //LEFT/UP beats DOWN/RIGHT
   POSITIVE, //DOWN/RIGHT beats LEFT/UP
-  LAST_INPUT, //Last input has priority
+  LAST_INPUT, //Last input has priority, not a valid state if being used for initial_input
 } Socd_t;
-Socd_t x_socd; //controls left/right
-Socd_t y_socd; //controls up/down
+Socd_t x_socd, y_socd = NEUTRAL; //controls left/right and up/down
+Socd_t x_initial_input, y_initial_input = NEUTRAL;
 
 /* mode selectors */
 bool xinput;
@@ -142,8 +142,8 @@ void setupPins(){
     buttonMINUS.interval(MILLIDEBOUNCE);
     buttonHOME.interval(MILLIDEBOUNCE);
 }
-void setup() {
 
+void setup() {
   modeChanged = false;
   EEPROM.get(0, state);
   EEPROM.get(2, xinput);
@@ -152,18 +152,18 @@ void setup() {
   setupPins();
   delay(500);
 
-#ifdef DISABLE_NSWITCH
-#warning "NSWITCH mode is disabled, will act only as an XInput controller"
-/* force Xinput */
-  xinput = true;
-#else
-#ifdef DISABLE_XINPUT
-#warning "XINPUT mode is disabled, will act only as a Nintendo switch controller"
-/* force nswitch */ 
-  xinput = false;
-#else
-/* set xinput mode according to held button */
-// if select is held on boot, NSWitch mode
+  #ifdef DISABLE_NSWITCH
+  #warning "NSWITCH mode is disabled, will act only as an XInput controller"
+  /* force Xinput */
+    xinput = true;
+  #else
+  #ifdef DISABLE_XINPUT
+  #warning "XINPUT mode is disabled, will act only as a Nintendo switch controller"
+  /* force nswitch */
+    xinput = false;
+  #else
+  /* set xinput mode according to held button */
+  // if select is held on boot, NSWitch mode
   int value = digitalRead(PIN_MINUS);
   if (value == LOW)
   {
@@ -269,8 +269,8 @@ void buttonRead()
   if (buttonR.update()) {buttonStatus[BUTTONRB] = buttonR.fell();}
   if (buttonZL.update()) {buttonStatus[BUTTONLT] = buttonZL.fell();}
   if (buttonZR.update()) {buttonStatus[BUTTONRT] = buttonZR.fell();}
-  if (buttonLS.update()) {buttonStatus[BUTTONL3] = buttonLS.fell();}
-  if (buttonRS.update()) {buttonStatus[BUTTONR3] = buttonRS.fell();}
+  if (buttonLS.update()) {buttonStatus[BUTTONL3] = buttonZL.fell();} //not a typo, XS_HID wants L3/R3
+  if (buttonRS.update()) {buttonStatus[BUTTONR3] = buttonZR.fell();}
   if (buttonPLUS.update()) {buttonStatus[BUTTONSTART] = buttonPLUS.fell();}
   if (buttonMINUS.update()) {buttonStatus[BUTTONSELECT] = buttonMINUS.fell();}
   if (buttonHOME.update()) { buttonStatus[BUTTONHOME] = buttonHOME.fell();}
@@ -289,4 +289,58 @@ void buttonRead()
   }
   #endif
   
+}
+
+void SOCD(byte *a, byte *b, Socd_t *input_priority, Socd_t *initial_input)
+{
+  // #ifdef DEBUG
+  //   Serial.print("Raw: ");
+  //   Serial.print(*a);
+  //   Serial.println(*b);
+  // #endif
+
+  if (*a && *b)
+  {
+    switch (*input_priority)
+    {
+    case NEUTRAL:
+      *a = *b = 0;
+      break;
+    case 1:
+      *b = 0;
+      break;
+    case 2:
+      *a = false;
+      *b = true;
+      break;
+    case 3:
+      switch (*initial_input)
+      {
+      case 1:
+        *a = false;
+        *b = true;
+        break;
+      case 2:
+        *a = true;
+        *b = false;
+        break;
+      case 0:
+        *a = *b = false;
+        break;
+      }
+    }
+  } 
+  else 
+  {
+    if (*a && !*b)
+      *initial_input = 1;
+    if (*b && !*a)
+      *initial_input = 2;
+  }
+
+  // #ifdef DEBUG
+  //   Serial.print("Cleaned: ");
+  //   Serial.print(*a);
+  //   Serial.println(*b);
+  // #endif
 }
