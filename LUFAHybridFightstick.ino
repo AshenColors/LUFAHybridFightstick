@@ -11,26 +11,28 @@
 //#define DISABLE_XINPUT
 
 //make it so holding start+select triggers the HOME button
-//#define HOME_HOTKEY
+#define HOME_HOTKEY
 //delay in ms for start+select to become HOME in HOME_HOTKEY mode
 #define HOME_DELAY 1000
 
 /* PINOUT (follows Nintendo naming (X=up, B=down)) */
-#define PIN_UP    A0
-#define PIN_DOWN  A2
-#define PIN_LEFT  A1
-#define PIN_RIGHT A3
-#define PIN_A     5            //XBOX B
-#define PIN_B     4            //XBOX A
-#define PIN_X     3            //XBOX Y
-#define PIN_Y     15           //XBOX X
-#define PIN_L     14           //XBOX LB
-#define PIN_R     2            //XBOX RB
-#define PIN_ZL    6            //XBOX LT
-#define PIN_ZR    7            //XBOX RT
+#define PIN_UP    2
+#define PIN_DOWN  3
+#define PIN_LEFT  4
+#define PIN_RIGHT 5
+#define PIN_A     6            //XBOX B
+#define PIN_B     7            //XBOX A
+#define PIN_X     8            //XBOX Y
+#define PIN_Y     9            //XBOX X
+#define PIN_L     20           //XBOX LB
+#define PIN_R     21           //XBOX RB
+#define PIN_ZL    19           //XBOX LT
+#define PIN_ZR    18           //XBOX RT
+#define PIN_LS    14           //XBOX LS
+#define PIN_RS    15           //XBOX RS
 #define PIN_PLUS  16           //XBOX START
 #define PIN_MINUS 10           //XBOX BACK
-#define PIN_HOME  9
+#define PIN_HOME  1            //XBOX GUIDE
 
 /* Buttons declarations */
 #define MILLIDEBOUNCE 1 //Debounce time in milliseconds
@@ -52,6 +54,8 @@ Bounce buttonL = Bounce();
 Bounce buttonR = Bounce();
 Bounce buttonZL = Bounce();
 Bounce buttonZR = Bounce();
+Bounce buttonLS = Bounce();
+Bounce buttonRS = Bounce();
 Bounce buttonPLUS = Bounce();
 Bounce buttonMINUS = Bounce();
 Bounce buttonHOME = Bounce();
@@ -63,6 +67,15 @@ typedef enum {
   DIGITAL,
 } State_t;
 State_t state;
+
+typedef enum {
+  NEUTRAL,  //L+R=N
+  NEGATIVE, //LEFT/UP beats DOWN/RIGHT
+  POSITIVE, //DOWN/RIGHT beats LEFT/UP
+  LAST_INPUT, //Last input has priority
+} Socd_t;
+Socd_t x_socd; //controls left/right
+Socd_t y_socd; //controls up/down
 
 /* mode selectors */
 bool xinput;
@@ -105,6 +118,8 @@ void setupPins(){
     buttonR.attach(PIN_R,INPUT_PULLUP);      // XBOX RB
     buttonZL.attach(PIN_ZL,INPUT_PULLUP);     // XBOX LT
     buttonZR.attach(PIN_ZR,INPUT_PULLUP);     // XBOX RT
+    buttonLS.attach(PIN_LS,INPUT_PULLUP);     // XBOX LS
+    buttonRS.attach(PIN_RS,INPUT_PULLUP);     // XBOX RS
     buttonPLUS.attach(PIN_PLUS,INPUT_PULLUP);  // XBOX START
     buttonMINUS.attach(PIN_MINUS,INPUT_PULLUP); // XBOX BACK
     buttonHOME.attach(PIN_HOME,INPUT_PULLUP);
@@ -121,6 +136,8 @@ void setupPins(){
     buttonR.interval(MILLIDEBOUNCE);
     buttonZL.interval(MILLIDEBOUNCE);
     buttonZR.interval(MILLIDEBOUNCE);
+    buttonLS.interval(MILLIDEBOUNCE);
+    buttonRS.interval(MILLIDEBOUNCE);
     buttonPLUS.interval(MILLIDEBOUNCE);
     buttonMINUS.interval(MILLIDEBOUNCE);
     buttonHOME.interval(MILLIDEBOUNCE);
@@ -130,6 +147,8 @@ void setup() {
   modeChanged = false;
   EEPROM.get(0, state);
   EEPROM.get(2, xinput);
+  EEPROM.get(4, x_socd);
+  EEPROM.get(6, y_socd);
   setupPins();
   delay(500);
 
@@ -140,7 +159,7 @@ void setup() {
 #else
 #ifdef DISABLE_XINPUT
 #warning "XINPUT mode is disabled, will act only as a Nintendo switch controller"
-/* force nswitch */
+/* force nswitch */ 
   xinput = false;
 #else
 /* set xinput mode according to held button */
@@ -250,22 +269,24 @@ void buttonRead()
   if (buttonR.update()) {buttonStatus[BUTTONRB] = buttonR.fell();}
   if (buttonZL.update()) {buttonStatus[BUTTONLT] = buttonZL.fell();}
   if (buttonZR.update()) {buttonStatus[BUTTONRT] = buttonZR.fell();}
+  if (buttonLS.update()) {buttonStatus[BUTTONL3] = buttonLS.fell();}
+  if (buttonRS.update()) {buttonStatus[BUTTONR3] = buttonRS.fell();}
   if (buttonPLUS.update()) {buttonStatus[BUTTONSTART] = buttonPLUS.fell();}
   if (buttonMINUS.update()) {buttonStatus[BUTTONSELECT] = buttonMINUS.fell();}
   if (buttonHOME.update()) { buttonStatus[BUTTONHOME] = buttonHOME.fell();}
 
-#ifdef HOME_HOTKEY  
-  if(buttonStatus[BUTTONSTART] && buttonStatus[BUTTONSELECT]) {
-   if (startAndSelTime == 0)
-    startAndSelTime = millis();
-   else if (currTime - startAndSelTime > HOME_DELAY)
-   {
-      buttonStatus[BUTTONHOME] = 1;
-   }
- } else {
-  startAndSelTime = 0;
-  buttonStatus[BUTTONHOME] = 0;
- }
-#endif
+  #ifdef HOME_HOTKEY  
+    if(buttonStatus[BUTTONSTART] && buttonStatus[BUTTONSELECT]) {
+    if (startAndSelTime == 0)
+      startAndSelTime = millis();
+    else if (currTime - startAndSelTime > HOME_DELAY)
+    {
+        buttonStatus[BUTTONHOME] = 1;
+    }
+  } else {
+    startAndSelTime = 0;
+    buttonStatus[BUTTONHOME] = 0;
+  }
+  #endif
   
 }
