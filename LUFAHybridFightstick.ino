@@ -83,6 +83,7 @@ Socd_t x_initial_input, y_initial_input = NEUTRAL;
 /* mode selectors */
 bool xinput;
 bool modeChanged;
+bool yinvert = false; // swap up and down directions
 
 void checkModeChange(){
     if (buttonStatus[BUTTONSTART] && buttonStatus[BUTTONSELECT])
@@ -94,7 +95,10 @@ void checkModeChange(){
         else if (internalButtonStatus[BUTTONRIGHT])
           state = RIGHT_ANALOG_MODE;
         else if (internalButtonStatus[BUTTONUP])
-          state = DIGITAL; 
+          state = DIGITAL;
+
+        if (buttonStatus[BUTTONRT])
+          yinvert ^= 1;
         
         EEPROM.put(0, state);
         modeChanged = true;
@@ -236,6 +240,7 @@ void loop() {
 void convert_dpad(){
   SOCD(&internalButtonStatus[BUTTONUP], &internalButtonStatus[BUTTONDOWN], &y_socd, &y_initial_input);
   SOCD(&internalButtonStatus[BUTTONLEFT], &internalButtonStatus[BUTTONRIGHT], &x_socd, &x_initial_input);
+
   switch (state)
   {
     case DIGITAL:
@@ -304,6 +309,14 @@ void buttonRead()
     internalButtonStatus[BUTTONDOWN] = !joystickDOWN.read();
     internalButtonStatus[BUTTONLEFT] = !joystickLEFT.read();
     internalButtonStatus[BUTTONRIGHT] = !joystickRIGHT.read();
+
+    // invert if yinvert is set
+    if (yinvert)
+    {
+      bool a = internalButtonStatus[BUTTONUP];
+      internalButtonStatus[BUTTONUP] = internalButtonStatus[BUTTONDOWN];
+      internalButtonStatus[BUTTONDOWN] = a;
+    }
   }
   if (buttonA.update()) {buttonStatus[BUTTONA] = buttonA.fell();}
   if (buttonB.update()) {buttonStatus[BUTTONB] = buttonB.fell();}
