@@ -1,3 +1,15 @@
+This branch adds configurable SOCD cleaning that is stored in EEPROM. The default is the usual hitbox L+R=N, U+D=U.
+
+The default configuration button combination is L3+R3.
+
+Configuration is performed by holding down input directions and then pressing the config button combination. Left and right are evaluated as the "X" axis, and up and down as "Y", and each is configurable separately.
+
+- If no buttons are held down, simultaneous inputs output neutral. This is the default L+R behavior for hitbox-style controllers.
+- If one button is held down, that button will take priority when simultaneous inputs are made. This is the default U+D behavior for hitbox-style controllers (up takes priority).
+- If both buttons are held down, the last input will take priority. (Also known as second input priority)
+
+---
+
 ## LUFA Switch/XInput hybrid Fightstick
 
 I really like the "neogeo pad 2" (basically a neogeo cd pad with 6 face buttons + 2 triggers), and wanted to make one of mine work both on nintendo switch and PC so I modded an Arduino pro micro inside it and made some code.
