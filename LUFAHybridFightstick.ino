@@ -6,6 +6,9 @@
 #include <EEPROM.h>
 #include <inttypes.h>
 
+// enable serial debugging
+//#define DEBUG true
+
 /* in case you want to disable one type of gamepad */
 //#define DISABLE_NSWITCH 
 //#define DISABLE_XINPUT
@@ -13,7 +16,7 @@
 //make it so holding start+select triggers the HOME button
 #define HOME_HOTKEY
 //delay in ms for start+select to become HOME in HOME_HOTKEY mode
-#define HOME_DELAY 1000
+#define HOME_DELAY 5000
 
 /* PINOUT (follows Nintendo naming (X=up, B=down)) */
 #define PIN_UP    2
@@ -86,20 +89,51 @@ void checkModeChange(){
     {
       if ( !modeChanged )
       {
-        bool need_update = true;
         if (internalButtonStatus[BUTTONLEFT])
           state = ANALOG_MODE;
         else if (internalButtonStatus[BUTTONRIGHT])
           state = RIGHT_ANALOG_MODE;
         else if (internalButtonStatus[BUTTONUP])
-          state = DIGITAL;
-        else need_update = false;
+          state = DIGITAL; 
         
-        if (need_update) EEPROM.put(0, state);
+        EEPROM.put(0, state);
         modeChanged = true;
       }
     }
-    else 
+    else if (buttonStatus[BUTTONL3] && buttonStatus[BUTTONR3])
+    {
+      if ( !modeChanged )
+      {
+        // read inputs at time of press
+        bool up = !joystickUP.read();
+        bool down = !joystickDOWN.read();
+        bool left = !joystickLEFT.read();
+        bool right = !joystickRIGHT.read();
+
+        if (up && down)
+          y_socd = LAST_INPUT;
+        else if (up)
+          y_socd = NEGATIVE;
+        else if (down)
+          y_socd = POSITIVE;
+        else if (!up && !down)
+          y_socd = NEUTRAL;
+
+        if (left && right)
+          x_socd = LAST_INPUT;
+        else if (left)
+          x_socd = NEGATIVE;
+        else if (right)
+          x_socd = POSITIVE;
+        else if (!left && !right)
+          x_socd = NEUTRAL;
+
+        EEPROM.put(4, x_socd);
+        EEPROM.put(6, y_socd);
+        modeChanged = true;     
+      }
+    }
+    else
     {
       modeChanged = false;
     }
@@ -144,6 +178,11 @@ void setupPins(){
 }
 
 void setup() {
+  // #ifdef DEBUG
+  //   Serial.begin(9600);
+  //   Serial.println("Debugging output enabled");
+  // #endif
+
   modeChanged = false;
   EEPROM.get(0, state);
   EEPROM.get(2, xinput);
@@ -179,8 +218,8 @@ void setup() {
         EEPROM.put(2, xinput);
       }
   }
-#endif
-#endif  
+  #endif
+  #endif  
   SetupHardware(xinput);
   GlobalInterruptEnable();
 }
@@ -189,65 +228,66 @@ void setup() {
 void loop() {
     currTime = millis();
     buttonRead();
-    checkModeChange();    
+    checkModeChange();
     convert_dpad();
     send_pad_state();
 }
 
 void convert_dpad(){
-  
+  SOCD(&internalButtonStatus[BUTTONUP], &internalButtonStatus[BUTTONDOWN], &y_socd, &y_initial_input);
+  SOCD(&internalButtonStatus[BUTTONLEFT], &internalButtonStatus[BUTTONRIGHT], &x_socd, &x_initial_input);
   switch (state)
   {
     case DIGITAL:
-    buttonStatus[AXISLX] = 128;
-    buttonStatus[AXISLY] = 128;
-    buttonStatus[AXISRX] = 128;
-    buttonStatus[AXISRY] = 128;
-    buttonStatus[BUTTONUP] = internalButtonStatus[BUTTONUP];
-    buttonStatus[BUTTONDOWN] = internalButtonStatus[BUTTONDOWN];
-    buttonStatus[BUTTONLEFT] = internalButtonStatus[BUTTONLEFT];
-    buttonStatus[BUTTONRIGHT] = internalButtonStatus[BUTTONRIGHT];
-    break;
+      buttonStatus[AXISLX] = 128;
+      buttonStatus[AXISLY] = 128;
+      buttonStatus[AXISRX] = 128;
+      buttonStatus[AXISRY] = 128;
+      buttonStatus[BUTTONUP] = internalButtonStatus[BUTTONUP];
+      buttonStatus[BUTTONDOWN] = internalButtonStatus[BUTTONDOWN];
+      buttonStatus[BUTTONLEFT] = internalButtonStatus[BUTTONLEFT];
+      buttonStatus[BUTTONRIGHT] = internalButtonStatus[BUTTONRIGHT];
+      break;
     
     case RIGHT_ANALOG_MODE:   
-    buttonStatus[AXISLX] = 128;
-    buttonStatus[AXISLY] = 128;
-    buttonStatus[BUTTONUP] = 0;
-    buttonStatus[BUTTONDOWN] = 0;
-    buttonStatus[BUTTONLEFT] = 0;
-    buttonStatus[BUTTONRIGHT] = 0;
+      buttonStatus[AXISLX] = 128;
+      buttonStatus[AXISLY] = 128;
+      buttonStatus[BUTTONUP] = 0;
+      buttonStatus[BUTTONDOWN] = 0;
+      buttonStatus[BUTTONLEFT] = 0;
+      buttonStatus[BUTTONRIGHT] = 0;
     
-    if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONRIGHT])){buttonStatus[AXISRY] = 0;buttonStatus[AXISRX] = 255;}
-    else if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONLEFT])){buttonStatus[AXISRY] = 0;buttonStatus[AXISRX] = 0;}
-    else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONRIGHT])) {buttonStatus[AXISRY] = 255;buttonStatus[AXISRX] = 255;}
-    else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONLEFT])) {buttonStatus[AXISRY] = 255;buttonStatus[AXISRX] = 0;}
-    else if (internalButtonStatus[BUTTONUP]) {buttonStatus[AXISRY] = 0;buttonStatus[AXISRX] = 128;}
-    else if (internalButtonStatus[BUTTONDOWN]) {buttonStatus[AXISRY] = 255;buttonStatus[AXISRX] = 128;}
-    else if (internalButtonStatus[BUTTONLEFT]) {buttonStatus[AXISRX] = 0;buttonStatus[AXISRY] = 128;}
-    else if (internalButtonStatus[BUTTONRIGHT]) {buttonStatus[AXISRX] = 255;buttonStatus[AXISRY] = 128;}
-    else {buttonStatus[AXISRX] = 128;buttonStatus[AXISRY] = 128;}
+      if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONRIGHT])){buttonStatus[AXISRY] = 0;buttonStatus[AXISRX] = 255;}
+      else if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONLEFT])){buttonStatus[AXISRY] = 0;buttonStatus[AXISRX] = 0;}
+      else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONRIGHT])) {buttonStatus[AXISRY] = 255;buttonStatus[AXISRX] = 255;}
+      else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONLEFT])) {buttonStatus[AXISRY] = 255;buttonStatus[AXISRX] = 0;}
+      else if (internalButtonStatus[BUTTONUP]) {buttonStatus[AXISRY] = 0;buttonStatus[AXISRX] = 128;}
+      else if (internalButtonStatus[BUTTONDOWN]) {buttonStatus[AXISRY] = 255;buttonStatus[AXISRX] = 128;}
+      else if (internalButtonStatus[BUTTONLEFT]) {buttonStatus[AXISRX] = 0;buttonStatus[AXISRY] = 128;}
+      else if (internalButtonStatus[BUTTONRIGHT]) {buttonStatus[AXISRX] = 255;buttonStatus[AXISRY] = 128;}
+      else {buttonStatus[AXISRX] = 128;buttonStatus[AXISRY] = 128;}
 
     break;
     
     case ANALOG_MODE:
       /* fallthrough */
     default:  
-    buttonStatus[AXISRX] = 128;
-    buttonStatus[AXISRY] = 128;
-    buttonStatus[BUTTONUP] = 0;
-    buttonStatus[BUTTONDOWN] = 0;
-    buttonStatus[BUTTONLEFT] = 0;
-    buttonStatus[BUTTONRIGHT] = 0;
+      buttonStatus[AXISRX] = 128;
+      buttonStatus[AXISRY] = 128;
+      buttonStatus[BUTTONUP] = 0;
+      buttonStatus[BUTTONDOWN] = 0;
+      buttonStatus[BUTTONLEFT] = 0;
+      buttonStatus[BUTTONRIGHT] = 0;
     
-    if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONRIGHT])){buttonStatus[AXISLY] = 0;buttonStatus[AXISLX] = 255;}
-    else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONRIGHT])) {buttonStatus[AXISLY] = 255;buttonStatus[AXISLX] = 255;}
-    else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONLEFT])) {buttonStatus[AXISLY] = 255;buttonStatus[AXISLX] = 0;}
-    else if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONLEFT])){buttonStatus[AXISLY] = 0;buttonStatus[AXISLX] = 0;}
-    else if (internalButtonStatus[BUTTONUP]) {buttonStatus[AXISLY] = 0;buttonStatus[AXISLX] = 128;}
-    else if (internalButtonStatus[BUTTONDOWN]) {buttonStatus[AXISLY] = 255;buttonStatus[AXISLX] = 128;}
-    else if (internalButtonStatus[BUTTONLEFT]) {buttonStatus[AXISLX] = 0;buttonStatus[AXISLY] = 128;}
-    else if (internalButtonStatus[BUTTONRIGHT]) {buttonStatus[AXISLX] = 255;buttonStatus[AXISLY] = 128;}
-    else {buttonStatus[AXISLX] = 128;buttonStatus[AXISLY] = 128;}
+      if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONRIGHT])){buttonStatus[AXISLY] = 0;buttonStatus[AXISLX] = 255;}
+      else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONRIGHT])) {buttonStatus[AXISLY] = 255;buttonStatus[AXISLX] = 255;}
+      else if ((internalButtonStatus[BUTTONDOWN]) && (internalButtonStatus[BUTTONLEFT])) {buttonStatus[AXISLY] = 255;buttonStatus[AXISLX] = 0;}
+      else if ((internalButtonStatus[BUTTONUP]) && (internalButtonStatus[BUTTONLEFT])){buttonStatus[AXISLY] = 0;buttonStatus[AXISLX] = 0;}
+      else if (internalButtonStatus[BUTTONUP]) {buttonStatus[AXISLY] = 0;buttonStatus[AXISLX] = 128;}
+      else if (internalButtonStatus[BUTTONDOWN]) {buttonStatus[AXISLY] = 255;buttonStatus[AXISLX] = 128;}
+      else if (internalButtonStatus[BUTTONLEFT]) {buttonStatus[AXISLX] = 0;buttonStatus[AXISLY] = 128;}
+      else if (internalButtonStatus[BUTTONRIGHT]) {buttonStatus[AXISLX] = 255;buttonStatus[AXISLY] = 128;}
+      else {buttonStatus[AXISLX] = 128;buttonStatus[AXISLY] = 128;}
 
     break;
     
@@ -256,11 +296,15 @@ void convert_dpad(){
 }
 
 void buttonRead()
-{  
-  if (joystickUP.update()) {internalButtonStatus[BUTTONUP] = joystickUP.fell();}
-  if (joystickDOWN.update()) {internalButtonStatus[BUTTONDOWN] = joystickDOWN.fell();}
-  if (joystickLEFT.update()) {internalButtonStatus[BUTTONLEFT] = joystickLEFT.fell();}
-  if (joystickRIGHT.update()) {internalButtonStatus[BUTTONRIGHT] = joystickRIGHT.fell();}
+{
+  joystickUP.update();   joystickDOWN.update(); joystickLEFT.update(); joystickRIGHT.update();
+  if (joystickUP.changed() || joystickDOWN.changed() || joystickLEFT.changed() || joystickRIGHT.changed())
+  {
+    internalButtonStatus[BUTTONUP] = !joystickUP.read();
+    internalButtonStatus[BUTTONDOWN] = !joystickDOWN.read();
+    internalButtonStatus[BUTTONLEFT] = !joystickLEFT.read();
+    internalButtonStatus[BUTTONRIGHT] = !joystickRIGHT.read();
+  }
   if (buttonA.update()) {buttonStatus[BUTTONA] = buttonA.fell();}
   if (buttonB.update()) {buttonStatus[BUTTONB] = buttonB.fell();}
   if (buttonX.update()) {buttonStatus[BUTTONX] = buttonX.fell();}
@@ -269,8 +313,8 @@ void buttonRead()
   if (buttonR.update()) {buttonStatus[BUTTONRB] = buttonR.fell();}
   if (buttonZL.update()) {buttonStatus[BUTTONLT] = buttonZL.fell();}
   if (buttonZR.update()) {buttonStatus[BUTTONRT] = buttonZR.fell();}
-  if (buttonLS.update()) {buttonStatus[BUTTONL3] = buttonZL.fell();} //not a typo, XS_HID wants L3/R3
-  if (buttonRS.update()) {buttonStatus[BUTTONR3] = buttonZR.fell();}
+  if (buttonLS.update()) {buttonStatus[BUTTONL3] = buttonLS.fell();} //not a typo, XS_HID wants L3/R3
+  if (buttonRS.update()) {buttonStatus[BUTTONR3] = buttonRS.fell();}
   if (buttonPLUS.update()) {buttonStatus[BUTTONSTART] = buttonPLUS.fell();}
   if (buttonMINUS.update()) {buttonStatus[BUTTONSELECT] = buttonMINUS.fell();}
   if (buttonHOME.update()) { buttonStatus[BUTTONHOME] = buttonHOME.fell();}
@@ -304,27 +348,28 @@ void SOCD(byte *a, byte *b, Socd_t *input_priority, Socd_t *initial_input)
     switch (*input_priority)
     {
     case NEUTRAL:
-      *a = *b = 0;
+      *a = *b = false;
       break;
-    case 1:
-      *b = 0;
+    case NEGATIVE:
+      *a = true;
+      *b = false;
       break;
-    case 2:
+    case POSITIVE:
       *a = false;
       *b = true;
       break;
-    case 3:
+    case LAST_INPUT:
       switch (*initial_input)
       {
-      case 1:
+      case NEGATIVE:
         *a = false;
         *b = true;
         break;
-      case 2:
+      case POSITIVE:
         *a = true;
         *b = false;
         break;
-      case 0:
+      case NEUTRAL:
         *a = *b = false;
         break;
       }
@@ -333,9 +378,9 @@ void SOCD(byte *a, byte *b, Socd_t *input_priority, Socd_t *initial_input)
   else 
   {
     if (*a && !*b)
-      *initial_input = 1;
+      *initial_input = NEGATIVE;
     if (*b && !*a)
-      *initial_input = 2;
+      *initial_input = POSITIVE;
   }
 
   // #ifdef DEBUG
